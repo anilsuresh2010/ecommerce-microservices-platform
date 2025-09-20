@@ -2,12 +2,13 @@ package com.ecommerce.product_service.controller;
 
 import com.ecommerce.product_service.model.Product;
 import com.ecommerce.product_service.service.ProductService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Controller
+@RestController
 @RequestMapping("/api/products")
 public class ProductController {
     private final ProductService service;
@@ -22,7 +23,7 @@ public class ProductController {
     }
 
     @PostMapping
-    public Product saveProduct(Product product){
+    public Product saveProduct(@RequestBody Product product) throws JsonProcessingException {
         return  service.createProduct(product);
     }
 
