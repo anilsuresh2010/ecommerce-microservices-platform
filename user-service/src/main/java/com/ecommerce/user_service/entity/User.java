@@ -8,6 +8,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 @Entity
 @AllArgsConstructor
 @NoArgsConstructor
@@ -20,5 +22,6 @@ public class User {
     private String userName;
     private String email;
     private String password;
+    private BigDecimal balance = BigDecimal.ZERO;
 
 }
