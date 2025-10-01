@@ -1,35 +1,52 @@
 package com.ecommerce.inventory_service.service;
 
-import com.ecommerce.inventory_service.model.Inventary;
+import com.ecommerce.inventory_service.kafka.InventoryProducer;
+import com.ecommerce.inventory_service.model.InventoryItem;
+import com.ecommerce.inventory_service.model.InventoryRequest;
 import com.ecommerce.inventory_service.repository.InventoryRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.Optional;
-
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class InventoryService {
-
+    @Autowired
     private final InventoryRepository repository;
+    @Autowired
+    private final InventoryProducer producer;
 
-    public InventoryService(InventoryRepository repository) {
+    public void reserveStock(InventoryRequest request) {
+        log.info("Received inventory reservation request for productId: {}", request.getProductId());
 
-        this.repository = repository;
+        InventoryItem item = repository.findByProductId(request.getProductId())
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        if (item.getQuantity() >= request.getQuantity()) {
+            item.setQuantity(item.getQuantity() - request.getQuantity());
+            repository.save(item);
+            log.info("Stock reserved for productId: {}, remaining quantity: {}", item.getProductId(), item.getQuantity());
+            producer.sendInventoryReservedEvent(request);
+        } else {
+            log.warn("Insufficient stock for productId: {}", request.getProductId());
+            producer.sendInventoryFailedEvent(request);
+        }
     }
 
-    public Inventary createInventory(Long productId, Integer quantity){
-        Inventary inventary = new Inventary();
-        inventary.setProductId(productId);
-        inventary.setQuantity(quantity);
-        return repository.save(inventary);
+    public void rollbackStock(InventoryRequest request) {
+        InventoryItem item = repository.findByProductId(request.getProductId())
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        item.setQuantity(item.getQuantity() + request.getQuantity());
+        repository.save(item);
+        log.info("Rolled back stock for productId: {}, new quantity: {}", item.getProductId(), item.getQuantity());
     }
 
-    public Inventary getInventoryById(Long productId){
-        return repository.findByProductId(productId).orElseThrow(() -> new RuntimeException("Inventary not found"));
+    public InventoryItem addInventory(InventoryItem item){
+        return repository.save(item);
     }
 
-    public Inventary updateQuantity(Long productId, int newQuantity){
-               Inventary inventary = getInventoryById(productId);
-               inventary.setQuantity(newQuantity);
-        return repository.save(inventary);
-    }
+
 }

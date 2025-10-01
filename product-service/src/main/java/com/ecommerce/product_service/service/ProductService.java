@@ -1,52 +1,48 @@
 package com.ecommerce.product_service.service;
 
 
-import com.ecommerce.product_service.kafka.KafkaProducer;
 import com.ecommerce.product_service.model.Product;
+import com.ecommerce.product_service.model.ProductRequest;
 import com.ecommerce.product_service.repository.ProductRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import org.springframework.data.jpa.repository.JpaRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+@Slf4j
 @Service
-public class ProductService{
+@RequiredArgsConstructor
+public class ProductService {
 
     private final ProductRepository repository;
-    private final KafkaProducer kafkaProducer;
 
-
-    public ProductService(ProductRepository repository, KafkaProducer kafkaProducer) {
-        this.repository = repository;
-        this.kafkaProducer = kafkaProducer;
+    public Product createProduct(ProductRequest request) {
+        log.info("Creating product: {}", request.getName());
+        Product product = new Product();
+        product.setName(request.getName());
+        product.setDescription(request.getDescription());
+        product.setPrice(request.getPrice());
+        product.setAvailable(true);
+        return repository.save(product);
     }
 
-    public Product createProduct(Product product) throws JsonProcessingException {
-        Product saved= repository.save(product);
-        kafkaProducer.sendProductCreatedEvent(saved);
-        return saved;
-    }
-
-    public Product getProductById(Long id){
-        return repository.findById(id)
-                .orElseThrow(()-> new RuntimeException("product not available.."));
-    }
-
-    public List<Product> getAllProduct(){
+    public List<Product> getAllProducts() {
+        log.info("Fetching all products");
         return repository.findAll();
     }
 
-    public void deleteProduct(Long id){
-        repository.deleteById(id);
+    public Product getProductByName(String name) {
+        log.info("Fetching product by name: {}", name);
+        return repository.findByName(name)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
     }
 
-    public Product updateProduct(Product newProduct, Long id){
-        Product existingProduct = getProductById(id);
-        existingProduct.setDescription(newProduct.getDescription());
-        existingProduct.setName(newProduct.getName());
-        existingProduct.setPrice(newProduct.getPrice());
-        return repository.save(existingProduct);
+    public void updateAvailability(Long productId, boolean available) {
+        Product product = repository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+        product.setAvailable(available);
+        repository.save(product);
+        log.info("Updated availability for product {}: {}", productId, available);
     }
-
 }

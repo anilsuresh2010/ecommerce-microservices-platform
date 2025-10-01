@@ -1,43 +1,41 @@
 package com.ecommerce.product_service.controller;
 
 import com.ecommerce.product_service.model.Product;
+import com.ecommerce.product_service.model.ProductRequest;
 import com.ecommerce.product_service.service.ProductService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import org.springframework.stereotype.Controller;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/products")
+@RequestMapping("/products")
+@RequiredArgsConstructor
+@Slf4j
 public class ProductController {
+
     private final ProductService service;
 
-    public ProductController(ProductService service) {
-        this.service = service;
-    }
-
-    @GetMapping("/{id}")
-    public Product getByid(@PathVariable Long id){
-        return service.getProductById(id);
-    }
-
-    @PostMapping
-    public Product saveProduct(@RequestBody Product product) throws JsonProcessingException {
-        return  service.createProduct(product);
+    @PostMapping("/create")
+    public Product createProduct(@RequestBody ProductRequest request) {
+        log.info("API called to create product: {}", request.getName());
+        return service.createProduct(request);
     }
 
     @GetMapping
-    public List<Product> getAllProduct(){
-        return service.getAllProduct();
+    public List<Product> getAllProducts() {
+        return service.getAllProducts();
     }
 
-    @DeleteMapping("/{id}")
-    public void removeProduct(@PathVariable Long id){
-        service.deleteProduct(id);
+    @GetMapping("/{name}")
+    public Product getProductByName(@PathVariable String name) {
+        return service.getProductByName(name);
     }
 
-    public Product updateProduct(@RequestBody Product product, @PathVariable Long id){
-        return service.updateProduct(product,id);
+    @PutMapping("/{id}/availability")
+    public void updateAvailability(@PathVariable Long id, @RequestParam boolean available) {
+        service.updateAvailability(id, available);
     }
 }
+

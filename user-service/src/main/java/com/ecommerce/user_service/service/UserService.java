@@ -1,47 +1,54 @@
 package com.ecommerce.user_service.service;
 
+import com.ecommerce.user_service.dto.UserRequest;
 import com.ecommerce.user_service.entity.User;
 import com.ecommerce.user_service.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
-import java.util.List;
-
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService {
 
     private final UserRepository repository;
+    private final PasswordEncoder encoder;
 
-    public List<User> getAllUser(){
-        return repository.findAll();
+    public User register(UserRequest request) {
+        log.info("Registering new user: {}", request.getUserName());
+        User user = new User();
+        user.setUserName(request.getUserName());
+        user.setEmail(request.getEmail());
+        user.setPassword(encoder.encode(request.getPassword()));
+        user.setBalance(5000); // default balance
+        return repository.save(user);
     }
 
-    public User createUser(User user){
-        if(user.getBalance() == null){
-            user.setBalance(BigDecimal.ZERO);
+    public User getUser(String username) {
+        return repository.findByUserName(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    public boolean deductBalance(String username, double amount) {
+        User user = getUser(username);
+        if (user.getBalance() >= amount) {
+            user.setBalance(user.getBalance() - amount);
+            repository.save(user);
+            log.info("Deducted ₹{} from user {}. Remaining balance: ₹{}", amount, username, user.getBalance());
+            return true;
+        } else {
+            log.warn("Insufficient balance for user {}", username);
+            return false;
         }
-        return repository.save(user);
+    }
+    public boolean addBalance(String username, double amount) {
+        User user = getUser(username);
+        user.setBalance(user.getBalance() + amount);
+        repository.save(user);
+        log.info("Added ₹{} to user {}. New balance: ₹{}", amount, username, user.getBalance());
+        return true;
     }
 
-    public User getUserById(Long id){
-        return repository.findById(id).orElseThrow(() -> new RuntimeException("User not found.."));
-    }
-
-    public User addBalance(Long userId, BigDecimal amount){
-        User user = getUserById(userId);
-        user.setBalance(user.getBalance().add(amount));
-        return repository.save(user);
-    }
-
-    public User deductBalance(Long userId, BigDecimal amount){
-        User user = getUserById(userId);
-        if(user.getBalance().compareTo(amount) <0)
-        {
-        throw new RuntimeException("Insufficient balance Please add the balance..");
-        }
-        user.setBalance(user.getBalance().subtract(amount));
-        return repository.save(user);
-    }
 }
