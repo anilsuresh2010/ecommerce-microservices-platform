@@ -1,0 +1,31 @@
+version: '3.8'
+
+# Override file for testing environments
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.test.yml up
+
+services:
+  user-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=test
+      - LOGGING_LEVEL_COM_ECOMMERCE_USER_SERVICE=DEBUG
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_TEST=DEBUG
+    ports:
+      - "8082:8080"  # Different port for testing
+    depends_on:
+      - user-service-db
+    command: ["java", "-jar", "/app/app.jar", "--spring.profiles.active=test"]
+
+  user-service-db:
+    environment:
+      - MYSQL_ROOT_PASSWORD=testroot
+      - MYSQL_DATABASE=user_service_test
+      - MYSQL_USER=user_service_test
+      - MYSQL_PASSWORD=testpass
+    ports:
+      - "3307:3306"  # Different port for testing
+    volumes:
+      - user_service_test_data:/var/lib/mysql
+
+volumes:
+  user_service_test_data:
+

@@ -1,0 +1,251 @@
+stages:
+  - build
+  - test
+  - package
+  - deploy
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# Cache Maven dependencies
+cache:
+  paths:
+    - .m2/repository
+    - target/
+
+# Build Stage
+build:
+  stage: build
+  image: maven:3.9.4-openjdk-17
+  script:
+    - echo "Building User Service..."
+    - mvn $MAVEN_CLI_OPTS clean compile
+  artifacts:
+    paths:
+      - target/classes/
+    expire_in: 1 hour
+  only:
+    - merge_requests
+    - main
+    - develop
+
+# Test Stage - Run JUnit5 Tests
+test:
+  stage: test
+  image: maven:3.9.4-openjdk-17
+  script:
+    - echo "Running JUnit5 Test Suite..."
+    - mvn $MAVEN_CLI_OPTS clean test
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    reports:
+      junit: target/surefire-reports/TEST-*.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: target/site/jacoco/jacoco.xml
+    paths:
+      - target/surefire-reports/
+      - target/site/jacoco/
+    expire_in: 1 week
+  only:
+    - merge_requests
+    - main
+    - develop
+
+# Test Coverage Report Generation
+test:coverage:
+  stage: test
+  image: maven:3.9.4-openjdk-17
+  script:
+    - echo "Generating Code Coverage Report..."
+    - mvn $MAVEN_CLI_OPTS clean test jacoco:report
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: target/site/jacoco/jacoco.xml
+    paths:
+      - target/site/jacoco/
+    expire_in: 1 week
+  only:
+    - merge_requests
+    - main
+    - develop
+
+# Package Stage - Build JAR
+package:
+  stage: package
+  image: maven:3.9.4-openjdk-17
+  script:
+    - echo "Packaging User Service..."
+    - mvn $MAVEN_CLI_OPTS clean package -DskipTests
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 1 week
+  only:
+    - main
+    - develop
+  dependencies:
+    - build
+
+# Docker Build (Optional - if using Docker)
+docker:build:
+  stage: package
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  script:
+    - echo "Building Docker Image..."
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG .
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - main
+  dependencies:
+    - package
+
+# Deploy to Staging
+deploy:staging:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Deploying to Staging Environment..."
+    - echo "Application version: $CI_COMMIT_REF_NAME"
+    - echo "Build number: $CI_JOB_ID"
+    - echo "Deploying JAR: target/user-service-0.0.1-SNAPSHOT.jar"
+    # Add your deployment commands here
+    # Example: scp target/*.jar user@staging-server:/opt/user-service/
+    # Example: ssh user@staging-server 'sudo systemctl restart user-service'
+  environment:
+    name: staging
+    url: http://staging.your-domain.com
+  only:
+    - develop
+  dependencies:
+    - package
+
+# Deploy to Production
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Deploying to Production Environment..."
+    - echo "Application version: $CI_COMMIT_REF_NAME"
+    - echo "Build number: $CI_JOB_ID"
+    - echo "Deploying JAR: target/user-service-0.0.1-SNAPSHOT.jar"
+    # Add your production deployment commands here
+    # Example: scp target/*.jar user@prod-server:/opt/user-service/
+    # Example: ssh user@prod-server 'sudo systemctl restart user-service'
+  environment:
+    name: production
+    url: http://your-domain.com
+  when: manual  # Require manual trigger for production
+  only:
+    - main
+  dependencies:
+    - package
+
+# Security Scan (Optional)
+security:scan:
+  stage: test
+  image: maven:3.9.4-openjdk-17
+  script:
+    - echo "Running Security Scan..."
+    - mvn $MAVEN_CLI_OPTS clean compile dependency-check:check
+  artifacts:
+    reports:
+      sast: target/dependency-check-report.html
+    paths:
+      - target/dependency-check-report.html
+    expire_in: 1 week
+  allow_failure: true
+  only:
+    - merge_requests
+    - main
+    - develop
+
+# Performance Test (Optional)
+performance:test:
+  stage: test
+  image: maven:3.9.4-openjdk-17
+  script:
+    - echo "Running Performance Tests..."
+    - mvn $MAVEN_CLI_OPTS clean test -Dtest="*PerformanceTest"
+  artifacts:
+    paths:
+      - target/performance-reports/
+    expire_in: 1 week
+  allow_failure: true
+  only:
+    - main
+    - develop
+
+# Code Quality Check
+code:quality:
+  stage: test
+  image: maven:3.9.4-openjdk-17
+  script:
+    - echo "Running Code Quality Analysis..."
+    - mvn $MAVEN_CLI_OPTS clean compile spotbugs:check
+  artifacts:
+    reports:
+      sast: target/spotbugsXml.xml
+    paths:
+      - target/spotbugs/
+    expire_in: 1 week
+  allow_failure: true
+  only:
+    - merge_requests
+    - main
+    - develop
+
+# Notification Job
+notify:success:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Pipeline completed successfully!"
+    - echo "Project: User Service"
+    - echo "Branch: $CI_COMMIT_REF_NAME"
+    - echo "Commit: $CI_COMMIT_SHA"
+    - echo "Pipeline: $CI_PIPELINE_URL"
+    # Add notification commands here (Slack, email, etc.)
+    # Example: curl -X POST -H 'Content-type: application/json' --data '{"text":"User Service pipeline passed!"}' $SLACK_WEBHOOK
+  only:
+    - main
+    - develop
+  when: on_success
+
+notify:failure:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Pipeline failed!"
+    - echo "Project: User Service"
+    - echo "Branch: $CI_COMMIT_REF_NAME"
+    - echo "Commit: $CI_COMMIT_SHA"
+    - echo "Pipeline: $CI_PIPELINE_URL"
+    # Add failure notification commands here
+  only:
+    - merge_requests
+    - main
+    - develop
+  when: on_failure
+
+# Cleanup Job
+cleanup:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Cleaning up old artifacts..."
+    - rm -rf .m2/repository/io/springframework/boot/spring-boot-starter-test
+    - rm -rf target/test-classes
+  when: always
+  allow_failure: true
+
